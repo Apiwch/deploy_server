@@ -20,16 +20,16 @@ app.use(cors({
 const mqttClient = mqtt.connect({
     host: '119.59.102.18',
     port: "1883",
-    username: 'username',
-    password: 'kG0882521310@',
+    username: '',
+    password: '',
     clean: true
 });
 
 const db = mysql.createPool({
     host: '119.59.102.18',
     port: '3306',
-    user: 'keng',
-    password: 'kG0882521310@',
+    user: '',
+    password: '',
     database: 'iot',
     connectionLimit: 10, // Adjust according to your needs
 });
