@@ -28,7 +28,7 @@ const mqttClient = mqtt.connect({
 const db = mysql.createPool({
     host: '119.59.102.18',
     port: '3306',
-    user: 'username',
+    user: 'keng',
     password: 'kG0882521310@',
     database: 'iot',
     connectionLimit: 10, // Adjust according to your needs
@@ -59,19 +59,32 @@ mqttClient.on('message', (topic, message) => {
     const mqttMessage = message.toString();
     const mqttMessageInsert = JSON.parse(mqttMessage)
 
+
     const tableName = topic.replace(/\//g, '_'); // Replace '/' with '_' for table name
+    const tableEventName = topic.replace(/\//g, '_') +"event"; // Replace '/' with '_' for table name
     const createTableQuery = `
       CREATE TABLE IF NOT EXISTS ${tableName} (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        name TEXT,
         value TEXT,
-        date TEXT,
-        time TEXT,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
+    const createTableEvent = `
+    CREATE TABLE IF NOT EXISTS ${tableEventName} (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      leq TEXT,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `;
 
     db.query(createTableQuery, (error, results, fields) => {
+        if (error) throw error;
+        // console.log(`Table ${tableName} created or already exists`);
+
+        // Save message to the corresponding table
+
+    });
+    db.query(createTableEvent, (error, results, fields) => {
         if (error) throw error;
         // console.log(`Table ${tableName} created or already exists`);
 
@@ -85,14 +98,24 @@ mqttClient.on('message', (topic, message) => {
         if (results[0]) {
 
             const insertMessageQuery = `
-        INSERT INTO ${tableName} (name, value, date, time) VALUES (?, ?, ?, ?)
-        `;
+            INSERT INTO ${tableName} (value) VALUES (?)
+            `;
 
-            db.query(insertMessageQuery, [mqttMessageInsert.name, mqttMessageInsert.value.toString(), mqttMessageInsert.date, mqttMessageInsert.time], (error, results, fields) => {
-                if (error) throw error;
+                db.query(insertMessageQuery, [ mqttMessageInsert.value.toString()], (error, results, fields) => {
+                    if (error) throw error;
 
-            });
+                });
 
+            if (mqttMessageInsert.valueLeq != 0){
+                const insertMessageEvent = `
+                INSERT INTO ${tableEventName} (leq) VALUES (?)
+                `;
+                
+                db.query(insertMessageEvent, [ mqttMessageInsert.valueLeq.toString()], (error, results, fields) => {
+                    if (error) throw error;
+
+                });
+            }
         }
     })
 
@@ -127,9 +150,12 @@ mqttClient.on('message', (topic, message) => {
             // time: Date.parse(parsedMessage.time),
             timestamp: item.timestamp,
             value: parsedMessage.value,
+            valueLeq: parsedMessage.valueLeq,
             batt: parsedMessage.batt
         };
     });
+
+
 
 
 
@@ -231,6 +257,62 @@ app.get('/api/data/:tableName', verifyToken, (req, res) => {
             // id: result.id,
             // name: result.name,
             value: result.value,
+            timestamp: result.timestamp,
+        }));
+
+        res.json(formattedData);
+
+    });
+});
+
+app.get('/api/leq/:tableName', verifyToken, (req, res) => {
+
+    function padTo2Digits(num) {
+        return num.toString().padStart(2, '0');
+    }
+
+    function formatDate(date) {
+        return (
+            [
+                date.getFullYear(),
+                padTo2Digits(date.getMonth() + 1),
+                padTo2Digits(date.getDate()),
+            ].join('-') +
+            ' ' + [
+                padTo2Digits(date.getHours()),
+                padTo2Digits(date.getMinutes()),
+                padTo2Digits(date.getSeconds()),
+            ].join(':')
+        );
+    }
+
+    const {
+        tableName
+    } = req.params;
+
+
+    // Calculate the timestamp for 10 minutes ago
+    const tenMinutesAgo = new Date();
+    tenMinutesAgo.setMinutes(tenMinutesAgo.getMinutes() - 10);
+
+
+    const selectDataQuery = `
+      SELECT * FROM ${tableName}
+      WHERE timestamp > '${formatDate(tenMinutesAgo)}';
+    `;
+
+    db.query(selectDataQuery, (error, results, fields) => {
+        if (error) {
+            console.error(`Error fetching data from table ${tableName}:`, error);
+            res.status(500).json({
+                error: 'Internal Server Error'
+            });
+            return;
+        }
+        const formattedData = results.map(result => ({
+            // id: result.id,
+            // name: result.name,
+            leq: result.leq,
             timestamp: result.timestamp,
         }));
 
