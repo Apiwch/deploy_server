@@ -20,16 +20,16 @@ app.use(cors({
 const mqttClient = mqtt.connect({
     host: '119.59.102.18',
     port: "1883",
-    username: '',
-    password: '',
+    username: 'username',
+    password: 'kG0882521310@',
     clean: true
 });
 
 const db = mysql.createPool({
     host: '119.59.102.18',
     port: '3306',
-    user: '',
-    password: '',
+    user: 'keng',
+    password: 'kG0882521310@',
     database: 'iot',
     connectionLimit: 10, // Adjust according to your needs
 });
@@ -94,29 +94,33 @@ mqttClient.on('message', (topic, message) => {
 
     const getDevices = `SELECT DeviceName FROM devices WHERE DeviceName =?`
     db.query(getDevices, [topic.split('/')[1]], (error, results) => {
+        try{
+            if (results[0]) {
 
-        if (results[0]) {
-
-            const insertMessageQuery = `
-            INSERT INTO ${tableName} (value) VALUES (?)
-            `;
-
-                db.query(insertMessageQuery, [ mqttMessageInsert.value.toString()], (error, results, fields) => {
-                    if (error) throw error;
-
-                });
-
-            if (mqttMessageInsert.valueLeq != 0){
-                const insertMessageEvent = `
-                INSERT INTO ${tableEventName} (leq) VALUES (?)
+                const insertMessageQuery = `
+                INSERT INTO ${tableName} (value) VALUES (?)
                 `;
-                
-                db.query(insertMessageEvent, [ mqttMessageInsert.valueLeq.toString()], (error, results, fields) => {
-                    if (error) throw error;
-
-                });
+    
+                    db.query(insertMessageQuery, [ mqttMessageInsert.value.toString()], (error, results, fields) => {
+                        if (error) throw error;
+    
+                    });
+    
+                if (mqttMessageInsert.valueLeq != 0){
+                    const insertMessageEvent = `
+                    INSERT INTO ${tableEventName} (leq) VALUES (?)
+                    `;
+                    
+                    db.query(insertMessageEvent, [ mqttMessageInsert.valueLeq.toString()], (error, results, fields) => {
+                        if (error) throw error;
+    
+                    });
+                }
             }
+        }catch (error){
+            console.log(error)
         }
+        
     })
 
 
@@ -208,6 +212,7 @@ const verifyToken = (req, res, next) => {
         });
     }
 };
+
 
 app.get('/api/data/:tableName', verifyToken, (req, res) => {
 
@@ -333,7 +338,7 @@ app.post('/api/login', (req, res) => {
     } = req.body;
 
     const selectUserQuery = `
-      SELECT id, username, password
+      SELECT id, username, password, role
       FROM users
       WHERE username = ?;
     `;
@@ -366,6 +371,7 @@ app.post('/api/login', (req, res) => {
                     const token = jwt.sign({
                             userId: user.id,
                             username: user.username,
+                            role: user.role
                         },
                         secretKey, {
                             expiresIn
@@ -397,7 +403,8 @@ app.post('/api/login', (req, res) => {
 app.post('/api/register', (req, res) => {
     const {
         username,
-        password
+        password, 
+        role
     } = req.body;
 
     // Hash the password before storing it
@@ -412,11 +419,11 @@ app.post('/api/register', (req, res) => {
         }
 
         const insertUserQuery = `
-        INSERT INTO users (username, password)
-        VALUES (?, ?);
+        INSERT INTO users (username, password, role)
+        VALUES (?, ?, ?);
       `;
 
-        db.query(insertUserQuery, [username, hashedPassword], (error, results, fields) => {
+        db.query(insertUserQuery, [username, hashedPassword, role], (error, results, fields) => {
             if (error) {
                 console.error('Error registering user:', error);
                 res.status(500).json({
@@ -447,8 +454,7 @@ app.get('/api/Devices/:userName', verifyToken, (req, res) => {
         userName
     } = req.params;
     const selectDataQuery = `
-    SELECT * FROM devices
-    WHERE user = ?;
+    SELECT * FROM devices;
     `;
     db.query(selectDataQuery, [userName], (error, results, fields) => {
         if (error) {
